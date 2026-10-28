@@ -1,0 +1,48 @@
+program: run_sweep.py
+method: bayes
+run_cap: 25
+
+metric:
+  name: val/classification.auroc
+  goal: maximize
+
+parameters:
+  # Phase 1: Optimization
+  # train.lr:
+  #   distribution: log_uniform_values
+  #   min: 1e-5
+  #   max: 5e-4
+
+  # train.weight_decay:
+  #   distribution: log_uniform_values
+  #   min: 1e-6
+  #   max: 1e-3
+
+  # train.early_stopping_patience:
+  #   values: [10, 20, 30, 40]
+
+  # Phase 2: Regularization
+  # data.aug_shift:
+  #   values: [0, 6, 8, 12]
+
+  # model.layers.3.dropout:
+  #   values: [0.0, 0.1, 0.2, 0.3]
+
+  # model.tabular.dropout:
+  #   values: [0.0, 0.1, 0.2, 0.3]
+
+  # model.predhead.dropout:
+  #   values: [0.0, 0.1, 0.2, 0.3]
+
+  # Phase 3: saliency heatmaps
+  # saliency.saliency_steps:
+  #   values: [10, 20, 30]
+
+  # saliency.saliency_normalize:
+  #   values: [per_video, per_frame]
+
+  # saliency.blur_kernel:
+  #   values: [(1, 11, 11), (1, 9, 9), (1, 15, 15)]
+
+  # saliency.blur_sigma:
+  #   values: [3, 4, 5]

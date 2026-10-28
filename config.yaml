@@ -1,0 +1,196 @@
+# ---------------- Phase control ----------------
+phase: train # Options: train | val | test | saliency
+cpu: false # Force CPU even if CUDA is available
+seed: 42
+sanity_check: false # Run a sanity check on a single batch
+
+# ---------------- Data config ----------------
+data:
+  csv_path: datasets/metadata.csv # Replace with your dataset CSV (relative to the working directory)
+  video_root: datasets/videos # Folder containing .avi videos
+  tabular_features: ["Example 1", "Example 2"] # Example: binary + regression
+  task_cols:
+    [
+      "video_id",
+      "Rythm_M24",
+      "LV_GL_Strain_M24",
+      "LA_reservoir_Strain_M24",
+      "LA_conduit_Strain_M24",
+      "LA_contractile_strain_M24",
+    ]
+  split_col: # specify if you want to split the dataset based on a column (e.g., patient_id) to avoid data leakage
+  val_ratio: 0.15
+  test_ratio: 0.15
+  aug_shift: 8
+
+  # Video data Parameters
+  stats_sample_size: all # sample size to calculate video mean and std for normalization
+  size: [128, 128] # Resize all frames to this size
+  clip_len: 32 # Number of frames per clip
+  frame_stride: 1 # Stride between frames
+  sampling: center # Options: center | random | all | DO Not Change
+  normalization: dataset # Options: imagenet | dataset
+  grayscale: true
+  show_tqdm: true
+
+balance:
+  mode: video_global # none | video_global
+  target_col: "Rythm_M24"
+
+# ---------------- Model config ----------------
+model:
+  name: multimodal # options: multimodal | videoonly
+  video_backbone: custom3dnet # options: custom3dnet | resnet | r2plus1d
+  use_video: true
+  use_tabular: true
+
+  # Stem block config (optional, can be merged into layer0)
+  stem:
+    in_channels: 1
+    mid_channels: 64
+    out_channels: 64
+    use_temporal_conv: true
+    spatial_kernel_size: [1, 7, 7]
+    temporal_kernel_size: [3, 1, 1]
+    stride: [1, 2, 2]
+    # padding: [1, 3, 3]
+
+  # List of layers: 4 total like ResNet
+  layers:
+    - name: layer1
+      num_blocks: 2
+      in_channels: 64
+      mid_channels: 64
+      out_channels: 64
+      stride: [1, 1, 1]
+      use_temporal_conv: true
+      spatial_kernel_size: [1, 3, 3]
+      temporal_kernel_size: [3, 1, 1]
+      dropout: 0.0
+
+    - name: layer2
+      num_blocks: 2
+      in_channels: 64
+      mid_channels: 64
+      out_channels: 64
+      stride: [1, 2, 2]
+      use_temporal_conv: true
+      spatial_kernel_size: [1, 3, 3]
+      temporal_kernel_size: [3, 1, 1]
+      dropout: 0.0
+
+    - name: layer3
+      num_blocks: 2
+      in_channels: 64
+      mid_channels: 64
+      out_channels: 64
+      stride: [1, 2, 2]
+      use_temporal_conv: true
+      spatial_kernel_size: [1, 3, 3]
+      temporal_kernel_size: [3, 1, 1]
+      dropout: 0.0
+
+    - name: layer4
+      num_blocks: 2
+      in_channels: 64
+      mid_channels: 64
+      out_channels: 64
+      stride: [2, 2, 2]
+      use_temporal_conv: true
+      spatial_kernel_size: [1, 3, 3]
+      temporal_kernel_size: [3, 1, 1]
+      dropout: 0.1
+
+  videoattention:
+    type: spaciotemporal # Options: spaciotemporal | none
+    patch_size: [2, 2, 2]
+    num_heads: 4
+    num_layers: 2
+    mlp_ratio: 4
+    cls_token: false
+    depatchify: true
+    average_pool: false
+    attention_pool: false
+    flatten: true
+
+  tabular:
+    input_dim: 55 # Number of tabular features in M0
+    hidden_dims: [64, 64]
+    out_dim: 64
+    activation: leakyrelu
+    normalization: layernorm
+    dropout: 0.2
+    pretrained_path: "" # leave empty if you wanna disable this(optional)
+    freeze: false
+
+  affine_modulation:
+    residual_gamma: False
+    normalization_mode: instance_norm # Options: none | instance_norm
+
+  predhead:
+    input_dim: 65536
+    hidden_dims: [500, 50]
+    out_dim: 1 # one value per task
+    activation: leakyrelu
+    normalization: layernorm
+    dropout: 0.2
+    multitask_head: true
+
+# ---------------- Training config ----------------
+train:
+  selection_metric: loss # Metric used for checkpoint selection (e.g., val_loss, val_Rythm_M24, etc.)
+  selection_mode: min
+  batch_size: 8
+  epochs: 100
+  lr: 1.2e-4 # 3e-4
+  weight_decay: 1.8e-5 # 1e-4
+  early_stopping_patience: 30
+  out_dir: runs/experiment
+  num_workers: 4
+  eval_after_train: true # Run test after training
+  loss_weights:
+    Rythm_M24: 1.0
+    LV_GL_Strain_M24: 0.25
+    LA_reservoir_Strain_M24: 0.25
+    LA_conduit_Strain_M24: 0.25
+    LA_contractile_strain_M24: 0.25
+  resume: false
+  show_tqdm: true
+  loss_agg: "mean" # or "sum"
+  # New just for cv
+  detect_anomaly: true
+  save_checkpoints: true # Save checkpoints during training
+
+# ---------------- Evaluation config ----------------
+eval:
+  checkpoint: null # Defaults to best.pt in train.out_dir; set a path for evaluation
+  threshold: 0.3 # For binary classification threshold
+  metric_level: video
+  video_reduce:
+    type: prob_max
+    topk: 0.35
+
+# ------------------ Saliency config ------------------
+saliency:
+  enable: false
+  saliency_task: "Rythm_M24"
+  saliency_batches: null # Options: Number of batches or null for all batches
+  saliency_steps: 30 # Test values 20 , 30 , 10 Not different
+  saliency_baseline: "blur"
+  blur_kernel: [1, 15, 15] # Test values 9 , 15
+  blur_sigma: 4 # Test values 3 , 4 , 5
+  saliency_chunk_size: 1 # keep at 1
+  saliency_normalize: "per_video" # test per_frame
+  saliency_stabilize: true # set to false to skip optical flow
+  saliency_ref_idx: 16
+  saliency_temporal_sigma: 1.0
+  method: SmoothIG # "IntegratedGradients" | "gradcam++" | "occlusion" | "attention" | "tabular_aware"
+  # name: smooth_ig
+  smooth_n_samples: 8
+  smooth_noise_level: 0.03
+
+# ---------------- WandB config ----------------
+wandb:
+  enable: false
+  project: tabstyle
+  # Authenticate with wandb login or WANDB_API_KEY when enabling logging.
